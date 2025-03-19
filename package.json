@@ -10,6 +10,7 @@
     "db:studio": "prisma studio"
   },
   "dependencies": {
+    "@elysiajs/swagger": "^1.2.2",
     "@prisma/client": "^6.5.0",
     "elysia": "latest"
   },
