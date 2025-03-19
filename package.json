@@ -2,14 +2,24 @@
   "name": "zelene-gateway",
   "version": "1.0.50",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "bun run --watch src/index.ts"
+    "dev": "nodemon --watch src --legacy-watch --exec 'bun run src/index.ts'",
+    "build": "tsc",
+    "start": "bun run dist/index.js",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio"
   },
   "dependencies": {
+    "@prisma/client": "^6.5.0",
     "elysia": "latest"
   },
   "devDependencies": {
-    "bun-types": "latest"
+    "@types/node": "^22.13.10",
+    "bun-types": "latest",
+    "nodemon": "^3.1.9",
+    "prisma": "^6.5.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.2"
   },
   "module": "src/index.js"
 }
