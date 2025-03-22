@@ -24,6 +24,8 @@ export const TopicSchema = t.Object({
     error: "The topicPath field cannot be empty",
   }),
   description: t.Optional(t.String()),
+  isPublic: t.Optional(t.Boolean()),
+  allowSubscribe: t.Optional(t.Boolean()),
 });
 
 export const SubscriptionSchema = t.Object({
@@ -38,6 +40,45 @@ export const SubscriptionSchema = t.Object({
   qos: t.Optional(t.Number()),
 });
 
+// Schema for topic publications
+export const PublicationSchema = t.Object({
+  deviceId: t.String({
+    minLength: 1,
+    error: "The deviceId field cannot be empty",
+  }),
+  topicPath: t.String({
+    minLength: 1,
+    error: "The topicPath field cannot be empty",
+  }),
+  payload: t.String({
+    error: "The payload field must be a string",
+  }),
+  qos: t.Optional(t.Number()),
+  retain: t.Optional(t.Boolean()),
+  // Optional scheduling parameters
+  scheduleTime: t.Optional(t.String()), // ISO string format for the scheduled time
+  scheduleId: t.Optional(t.String()), // For updating an existing scheduled publication
+});
+
+// Schema for scheduled publications
+export const ScheduledPublicationSchema = t.Object({
+  id: t.Optional(t.String()), // Only needed for updates
+  deviceId: t.String({
+    minLength: 1,
+    error: "The deviceId field cannot be empty",
+  }),
+  topicPath: t.String({
+    minLength: 1,
+    error: "The topicPath field cannot be empty",
+  }),
+  payload: t.String({
+    error: "The payload field must be a string",
+  }),
+  qos: t.Optional(t.Number()),
+  retain: t.Optional(t.Boolean()),
+  scheduledTime: t.String(), // ISO string format for the scheduled time
+});
+
 // For query parameters that need generic validation
 export const NonEmptyString = t.String({
   minLength: 1,
@@ -48,6 +89,8 @@ export const NonEmptyString = t.String({
 export type DeviceDto = Static<typeof DeviceSchema>;
 export type TopicDto = Static<typeof TopicSchema>;
 export type SubscriptionDto = Static<typeof SubscriptionSchema>;
+export type PublicationDto = Static<typeof PublicationSchema>;
+export type ScheduledPublicationDto = Static<typeof ScheduledPublicationSchema>;
 
 // Response types
 export interface ApiResponse<T> {
@@ -55,4 +98,14 @@ export interface ApiResponse<T> {
   data?: T;
   error?: string;
   validationErrors?: Record<string, string>;
+}
+
+// Message type for published messages
+export interface MqttMessage {
+  topic: string;
+  payload: string;
+  qos: number;
+  retain: boolean;
+  deviceId: string;
+  timestamp: Date;
 }

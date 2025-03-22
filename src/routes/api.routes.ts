@@ -1,8 +1,8 @@
 // src/routes/api.routes.ts
 import { Elysia } from "elysia";
 import { deviceRoutes } from "./device.routes";
-import { topicRoutes } from "./topic.routes";
 import { subscriptionRoutes } from "./subscription.routes";
+import { publicationRoutes } from "./publication.routes";
 import { createLogger } from "../utils/logger";
 
 const logger = createLogger("ApiRoutes");
@@ -10,8 +10,8 @@ const logger = createLogger("ApiRoutes");
 // API v1 router
 export const apiV1Routes = new Elysia({ prefix: "/v1" })
   .use(deviceRoutes)
-  .use(topicRoutes)
-  .use(subscriptionRoutes);
+  .use(subscriptionRoutes)
+  .use(publicationRoutes);
 
 // Main API router with versioning
 export const apiRoutes = new Elysia({ prefix: "/api" })

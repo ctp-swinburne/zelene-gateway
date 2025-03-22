@@ -6,6 +6,15 @@ import { SubscriptionSchema, ApiResponse } from "../types/mqtt";
 
 const logger = createLogger("SubscriptionRoutes");
 
+// QoS update schema
+const QoSUpdateSchema = t.Object({
+  qos: t.Number({
+    minimum: 0,
+    maximum: 2,
+    error: "QoS must be 0, 1, or 2",
+  }),
+});
+
 export const subscriptionRoutes = new Elysia({ prefix: "/subscriptions" })
   .post(
     "/",
@@ -94,6 +103,136 @@ export const subscriptionRoutes = new Elysia({ prefix: "/subscriptions" })
         tags: ["Subscriptions"],
         summary: "Get device subscriptions",
         description: "Retrieves all topic subscriptions for a specific device",
+      },
+    }
+  )
+  .get(
+    "/:id",
+    async ({ params, set }): Promise<ApiResponse<any>> => {
+      const { id } = params;
+      logger.info(`Received request to get subscription with ID: ${id}`);
+
+      try {
+        const subscription = await subscriptionController.getSubscriptionById(
+          id
+        );
+
+        if (!subscription) {
+          logger.warn(`Subscription not found with ID: ${id}`);
+          set.status = 404;
+          return { success: false, error: "Subscription not found" };
+        }
+
+        return { success: true, data: subscription };
+      } catch (error: any) {
+        logger.error(
+          `Error processing get subscription request for ID: ${id}`,
+          error
+        );
+        set.status = 500;
+        return {
+          success: false,
+          error: error.message || "Failed to fetch subscription",
+        };
+      }
+    },
+    {
+      params: t.Object({
+        id: t.String({
+          minLength: 1,
+          error: "The subscription ID field cannot be empty",
+        }),
+      }),
+      detail: {
+        tags: ["Subscriptions"],
+        summary: "Get subscription by ID",
+        description: "Retrieves a specific subscription by its ID",
+      },
+    }
+  )
+  .put(
+    "/:id",
+    async ({ params, body, set }): Promise<ApiResponse<any>> => {
+      const { id } = params;
+      const { qos } = body;
+      logger.info(`Received request to update subscription with ID: ${id}`);
+
+      try {
+        const result = await subscriptionController.updateSubscription(id, qos);
+        return { success: true, data: result };
+      } catch (error: any) {
+        logger.error(
+          `Error processing update subscription request for ID: ${id}`,
+          error
+        );
+
+        // Set appropriate status code based on error type
+        if (error.message.includes("not found")) {
+          set.status = 404; // Not Found
+        } else {
+          set.status = 500; // Internal Server Error
+        }
+
+        return {
+          success: false,
+          error: error.message || "Failed to update subscription",
+        };
+      }
+    },
+    {
+      params: t.Object({
+        id: t.String({
+          minLength: 1,
+          error: "The subscription ID field cannot be empty",
+        }),
+      }),
+      body: QoSUpdateSchema,
+      detail: {
+        tags: ["Subscriptions"],
+        summary: "Update a subscription",
+        description: "Updates a subscription's QoS level",
+      },
+    }
+  )
+  .delete(
+    "/:id",
+    async ({ params, set }): Promise<ApiResponse<any>> => {
+      const { id } = params;
+      logger.info(`Received request to delete subscription with ID: ${id}`);
+
+      try {
+        const result = await subscriptionController.deleteSubscription(id);
+        return { success: true, data: result };
+      } catch (error: any) {
+        logger.error(
+          `Error processing delete subscription request for ID: ${id}`,
+          error
+        );
+
+        // Set appropriate status code based on error type
+        if (error.message.includes("not found")) {
+          set.status = 404; // Not Found
+        } else {
+          set.status = 500; // Internal Server Error
+        }
+
+        return {
+          success: false,
+          error: error.message || "Failed to delete subscription",
+        };
+      }
+    },
+    {
+      params: t.Object({
+        id: t.String({
+          minLength: 1,
+          error: "The subscription ID field cannot be empty",
+        }),
+      }),
+      detail: {
+        tags: ["Subscriptions"],
+        summary: "Delete a subscription",
+        description: "Deletes a subscription",
       },
     }
   );

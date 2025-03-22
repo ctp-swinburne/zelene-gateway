@@ -15,12 +15,12 @@ export const app = new Elysia()
         info: {
           title: "Zelene Gateway API",
           version: "1.0.0",
-          description: "API for managing MQTT subscriptions",
+          description: "API for managing MQTT subscriptions and publications",
         },
         tags: [
           { name: "Devices", description: "Device management" },
-          { name: "Topics", description: "Topic management" },
           { name: "Subscriptions", description: "Subscription management" },
+          { name: "Publications", description: "Topic publication management" },
         ],
       },
     })
@@ -52,7 +52,7 @@ export const app = new Elysia()
   .use(apiRoutes)
   .get("/", () => {
     logger.info("Root endpoint accessed");
-    return "Zelene Gateway API - MQTT Subscription Management";
+    return "Zelene Gateway API - MQTT Subscription and Publication Management";
   });
 
 // Log when the app is configured

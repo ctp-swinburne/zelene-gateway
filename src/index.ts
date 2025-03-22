@@ -17,8 +17,9 @@ if (server) {
   // Log available endpoints for quick reference
   logger.info("Available API endpoints:");
   logger.info(`${baseUrl}/api/v1/devices`);
-  logger.info(`${baseUrl}/api/v1/topics`);
   logger.info(`${baseUrl}/api/v1/subscriptions`);
+  logger.info(`${baseUrl}/api/v1/publications`);
+  logger.info(`${baseUrl}/api/v1/publications/schedule`);
 } else {
   logger.error("Failed to start the server");
   process.exit(1);

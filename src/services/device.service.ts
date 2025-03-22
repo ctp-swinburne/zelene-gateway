@@ -54,3 +54,98 @@ export const getDeviceById = async (id: string) => {
     throw error;
   }
 };
+
+export const getAllDevices = async () => {
+  logger.info("Fetching all devices");
+
+  try {
+    const devices = await prisma.device.findMany({
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    logger.info(`Successfully fetched ${devices.length} devices`);
+    return devices;
+  } catch (error: any) {
+    logger.error("Failed to fetch all devices", error);
+    throw error;
+  }
+};
+
+export const updateDevice = async (
+  id: string,
+  deviceData: Partial<DeviceDto>
+) => {
+  logger.info(`Updating device with ID: ${id}`);
+
+  try {
+    // First check if the device exists
+    const existingDevice = await getDeviceById(id);
+    if (!existingDevice) {
+      logger.warn(`Device not found with ID: ${id}`);
+      throw new Error(`Device not found with ID: ${id}`);
+    }
+
+    const updatedDevice = await prisma.device.update({
+      where: { id },
+      data: {
+        ...(deviceData.name && { name: deviceData.name }),
+        ...(deviceData.username && { username: deviceData.username }),
+        ...(deviceData.password && { password: deviceData.password }),
+        ...(deviceData.description !== undefined && {
+          description: deviceData.description,
+        }),
+      },
+    });
+
+    logger.info(`Successfully updated device with ID: ${id}`);
+    return updatedDevice;
+  } catch (error: any) {
+    // Check for specific Prisma errors
+    if (error.code === "P2002") {
+      const field = error.meta?.target?.[0] || "field";
+      logger.warn(`Device update failed: ${field} already exists`);
+      throw new Error(`A device with this ${field} already exists`);
+    }
+
+    logger.error(`Failed to update device with ID: ${id}`, error);
+    throw error;
+  }
+};
+
+export const deleteDevice = async (id: string) => {
+  logger.info(`Deleting device with ID: ${id}`);
+
+  try {
+    // First check if the device exists
+    const existingDevice = await getDeviceById(id);
+    if (!existingDevice) {
+      logger.warn(`Device not found with ID: ${id}`);
+      throw new Error(`Device not found with ID: ${id}`);
+    }
+
+    // Delete all subscriptions and scheduled publications first
+    // This is needed due to foreign key constraints
+    await prisma.$transaction([
+      prisma.subscription.deleteMany({
+        where: { deviceId: id },
+      }),
+      prisma.scheduledPublication.deleteMany({
+        where: { deviceId: id },
+      }),
+      prisma.publication.deleteMany({
+        where: { deviceId: id },
+      }),
+      prisma.device.delete({
+        where: { id },
+      }),
+    ]);
+
+    logger.info(`Successfully deleted device with ID: ${id}`);
+    return { id };
+  } catch (error: any) {
+    logger.error(`Failed to delete device with ID: ${id}`, error);
+    throw error;
+  }
+};

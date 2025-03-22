@@ -9,23 +9,29 @@ datasource db {
 }
 
 model Device {
-  id            String         @id @default(cuid())
-  name          String
-  username      String // MQTT username
-  password      String // MQTT password
-  description   String?
-  subscriptions Subscription[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id                    String                 @id @default(cuid())
+  name                  String
+  username              String // MQTT username
+  password              String // MQTT password
+  description           String?
+  subscriptions         Subscription[]
+  publications          Publication[]
+  scheduledPublications ScheduledPublication[]
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
 }
 
 model Topic {
-  id            String         @id @default(cuid())
-  topicPath     String         @unique // MQTT topic path
-  description   String?
-  subscriptions Subscription[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id                    String                 @id @default(cuid())
+  topicPath             String                 @unique // MQTT topic path
+  description           String?
+  isPublic              Boolean                @default(true) // Whether the topic is publicly accessible
+  allowSubscribe        Boolean                @default(true) // Whether devices can subscribe to this topic
+  subscriptions         Subscription[]
+  publications          Publication[]
+  scheduledPublications ScheduledPublication[]
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
 }
 
 model Subscription {
@@ -39,4 +45,32 @@ model Subscription {
   updatedAt DateTime @updatedAt
 
   @@unique([deviceId, topicId]) // Prevent duplicate subscriptions
+}
+
+model Publication {
+  id        String   @id @default(cuid())
+  device    Device   @relation(fields: [deviceId], references: [id])
+  deviceId  String
+  topic     Topic    @relation(fields: [topicId], references: [id])
+  topicId   String
+  payload   String // The message payload
+  qos       Int      @default(0) // MQTT QoS level (0, 1, or 2)
+  retain    Boolean  @default(false) // Whether the message should be retained
+  createdAt DateTime @default(now())
+}
+
+model ScheduledPublication {
+  id            String    @id @default(cuid())
+  device        Device    @relation(fields: [deviceId], references: [id])
+  deviceId      String
+  topic         Topic     @relation(fields: [topicId], references: [id])
+  topicId       String
+  payload       String // The message payload
+  qos           Int       @default(0) // MQTT QoS level (0, 1, or 2)
+  retain        Boolean   @default(false) // Whether the message should be retained
+  scheduledTime DateTime // When to publish the message
+  publishedAt   DateTime? // When the message was actually published (null if not yet published)
+  status        String    @default("PENDING") // PENDING, PUBLISHED, FAILED
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 }

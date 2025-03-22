@@ -2,6 +2,9 @@
 import {
   createSubscription,
   getDeviceSubscriptions,
+  getSubscriptionById,
+  updateSubscription,
+  deleteSubscription,
 } from "../services/subscription.service";
 import { createLogger } from "../utils/logger";
 import { SubscriptionDto } from "../types/mqtt";
@@ -45,6 +48,51 @@ export const subscriptionController = {
         `Failed to fetch subscriptions for device: ${deviceId}`,
         error
       );
+      throw error;
+    }
+  },
+
+  async getSubscriptionById(id: string) {
+    logger.info(`Handling request to get subscription with ID: ${id}`);
+
+    try {
+      const subscription = await getSubscriptionById(id);
+
+      if (!subscription) {
+        logger.warn(`Subscription not found with ID: ${id}`);
+        return null;
+      }
+
+      logger.info(`Successfully fetched subscription with ID: ${id}`);
+      return { success: true, data: subscription };
+    } catch (error: any) {
+      logger.error(`Failed to fetch subscription with ID: ${id}`, error);
+      throw error;
+    }
+  },
+
+  async updateSubscription(id: string, qos: number) {
+    logger.info(`Handling request to update subscription with ID: ${id}`);
+
+    try {
+      const subscription = await updateSubscription(id, qos);
+      logger.info(`Successfully updated subscription with ID: ${id}`);
+      return { success: true, data: subscription };
+    } catch (error: any) {
+      logger.error(`Failed to update subscription with ID: ${id}`, error);
+      throw error;
+    }
+  },
+
+  async deleteSubscription(id: string) {
+    logger.info(`Handling request to delete subscription with ID: ${id}`);
+
+    try {
+      const result = await deleteSubscription(id);
+      logger.info(`Successfully deleted subscription with ID: ${id}`);
+      return { success: true, data: result };
+    } catch (error: any) {
+      logger.error(`Failed to delete subscription with ID: ${id}`, error);
       throw error;
     }
   },
