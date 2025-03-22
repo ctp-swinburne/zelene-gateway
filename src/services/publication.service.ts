@@ -559,7 +559,7 @@ export const processScheduledPublications = async () => {
         logger.info(
           `Successfully published scheduled message: ${publication.id}`
         );
-      } catch (error) {
+      } catch (error: any) {
         logger.error(
           `Failed to publish scheduled message: ${publication.id}`,
           error
@@ -609,7 +609,7 @@ async function deliverMessageToSubscribers(message: MqttMessage) {
         }
       }
     }
-  } catch (error) {
+  } catch (error: any) {
     logger.error("Error delivering message to subscribers", error);
   }
 }
@@ -622,7 +622,7 @@ function notifySubscribers(message: MqttMessage) {
     callbacks.forEach((callback) => {
       try {
         callback(message);
-      } catch (error) {
+      } catch (error: any) {
         logger.error(`Error notifying client ${clientId}`, error);
       }
     });

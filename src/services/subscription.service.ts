@@ -50,7 +50,7 @@ async function getOrCreateTopic(topicPath: string, description?: string) {
     }
 
     return topic;
-  } catch (error) {
+  } catch (error: any) {
     logger.error(`Failed to get or create topic: ${topicPath}`, error);
     throw error;
   }
