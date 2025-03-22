@@ -25,6 +25,30 @@ export const app = new Elysia()
       },
     })
   )
+  .onError(({ code, error, set }) => {
+    if (code === "VALIDATION") {
+      logger.warn(`Validation error: ${JSON.stringify(error.all)}`);
+      set.status = 400;
+
+      return {
+        success: false,
+        error: "Validation failed",
+        validationErrors: error.all,
+      };
+    }
+
+    // Safely handle error message with fallback
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error occurred";
+
+    logger.error(`Unhandled error: ${errorMessage}`);
+    set.status = 500;
+
+    return {
+      success: false,
+      error: "Internal server error",
+    };
+  })
   .use(apiRoutes)
   .get("/", () => {
     logger.info("Root endpoint accessed");

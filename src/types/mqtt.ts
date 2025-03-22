@@ -1,29 +1,47 @@
 // src/types/mqtt.ts
 import { t, Static } from "elysia";
 
-// Custom string validation for non-empty strings
-export const NonEmptyString = t.String({
-  minLength: 1,
-  error: "This field cannot be empty",
-});
-
-// Schemas for validation
+// Schemas for validation with specific error messages
 export const DeviceSchema = t.Object({
-  name: NonEmptyString,
-  username: NonEmptyString,
-  password: NonEmptyString,
+  name: t.String({
+    minLength: 1,
+    error: "The name field cannot be empty",
+  }),
+  username: t.String({
+    minLength: 1,
+    error: "The username field cannot be empty",
+  }),
+  password: t.String({
+    minLength: 1,
+    error: "The password field cannot be empty",
+  }),
   description: t.Optional(t.String()),
 });
 
 export const TopicSchema = t.Object({
-  topicPath: NonEmptyString,
+  topicPath: t.String({
+    minLength: 1,
+    error: "The topicPath field cannot be empty",
+  }),
   description: t.Optional(t.String()),
 });
 
 export const SubscriptionSchema = t.Object({
-  deviceId: NonEmptyString,
-  topicPath: NonEmptyString,
+  deviceId: t.String({
+    minLength: 1,
+    error: "The deviceId field cannot be empty",
+  }),
+  topicPath: t.String({
+    minLength: 1,
+    error: "The topicPath field cannot be empty",
+  }),
   qos: t.Optional(t.Number()),
+});
+
+// For query parameters that need generic validation
+export const NonEmptyString = t.String({
+  minLength: 1,
+  error: "This field cannot be empty",
 });
 
 // DTOs based on the schemas - using Static instead of t.InferType
@@ -36,4 +54,5 @@ export interface ApiResponse<T> {
   success: boolean;
   data?: T;
   error?: string;
+  validationErrors?: Record<string, string>;
 }

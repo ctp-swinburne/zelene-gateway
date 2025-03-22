@@ -59,11 +59,6 @@ export const subscriptionRoutes = new Elysia({ prefix: "/subscriptions" })
         `Received request to get subscriptions for device: ${deviceId}`
       );
 
-      if (!deviceId || deviceId.trim() === "") {
-        set.status = 400;
-        return { success: false, error: "Device ID is required" };
-      }
-
       try {
         const result = await subscriptionController.getDeviceSubscriptions(
           deviceId
@@ -90,7 +85,10 @@ export const subscriptionRoutes = new Elysia({ prefix: "/subscriptions" })
     },
     {
       params: t.Object({
-        deviceId: t.String(),
+        deviceId: t.String({
+          minLength: 1,
+          error: "The device ID field cannot be empty",
+        }),
       }),
       detail: {
         tags: ["Subscriptions"],

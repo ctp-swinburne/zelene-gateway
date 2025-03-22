@@ -2,7 +2,7 @@
 import { Elysia, t } from "elysia";
 import { topicController } from "../controllers/topic.controller";
 import { createLogger } from "../utils/logger";
-import { TopicSchema, ApiResponse, NonEmptyString } from "../types/mqtt";
+import { TopicSchema, ApiResponse } from "../types/mqtt";
 
 const logger = createLogger("TopicRoutes");
 
@@ -73,7 +73,10 @@ export const topicRoutes = new Elysia({ prefix: "/topics" })
     },
     {
       query: t.Object({
-        path: NonEmptyString,
+        path: t.String({
+          minLength: 1,
+          error: "The topic path field cannot be empty",
+        }),
       }),
       detail: {
         tags: ["Topics"],

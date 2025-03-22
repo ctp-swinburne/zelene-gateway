@@ -46,11 +46,6 @@ export const deviceRoutes = new Elysia({ prefix: "/devices" })
       const { id } = params;
       logger.info(`Received request to get device with ID: ${id}`);
 
-      if (!id || id.trim() === "") {
-        set.status = 400;
-        return { success: false, error: "Device ID is required" };
-      }
-
       try {
         const device = await deviceController.getDeviceById(id);
 
@@ -75,7 +70,10 @@ export const deviceRoutes = new Elysia({ prefix: "/devices" })
     },
     {
       params: t.Object({
-        id: t.String(),
+        id: t.String({
+          minLength: 1,
+          error: "The device ID field cannot be empty",
+        }),
       }),
       detail: {
         tags: ["Devices"],
