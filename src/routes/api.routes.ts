@@ -10,8 +10,8 @@ const logger = createLogger("ApiRoutes");
 // API v1 router
 export const apiV1Routes = new Elysia({ prefix: "/v1" })
   .use(deviceRoutes)
-  .use(subscriptionRoutes)
-  .use(publicationRoutes);
+  .use(publicationRoutes)
+  .use(subscriptionRoutes);
 
 // Main API router with versioning
 export const apiRoutes = new Elysia({ prefix: "/api" })

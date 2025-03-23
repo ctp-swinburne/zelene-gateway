@@ -10,12 +10,27 @@ export const createDevice = async (deviceData: DeviceDto) => {
   logger.info(`Creating new device: ${deviceData.name}`);
 
   try {
+    // Validate required fields
+    if (!deviceData.name || deviceData.name.trim() === "") {
+      throw new Error("Device name cannot be empty");
+    }
+
+    if (!deviceData.username || deviceData.username.trim() === "") {
+      throw new Error("Device username cannot be empty");
+    }
+
+    if (!deviceData.password || deviceData.password.trim() === "") {
+      throw new Error("Device password cannot be empty");
+    }
+
     const device = await prisma.device.create({
       data: {
-        name: deviceData.name,
-        username: deviceData.username,
-        password: deviceData.password,
-        description: deviceData.description,
+        name: deviceData.name.trim(),
+        username: deviceData.username.trim(),
+        password: deviceData.password.trim(),
+        description: deviceData.description
+          ? deviceData.description.trim()
+          : null,
       },
     });
 
@@ -38,6 +53,12 @@ export const getDeviceById = async (id: string) => {
   logger.info(`Fetching device with ID: ${id}`);
 
   try {
+    // Validate ID format first
+    if (!id || id.trim() === "") {
+      logger.warn(`Invalid device ID provided: ${id}`);
+      return null;
+    }
+
     const device = await prisma.device.findUnique({
       where: { id },
     });
@@ -87,16 +108,43 @@ export const updateDevice = async (
       throw new Error(`Device not found with ID: ${id}`);
     }
 
+    // Only include properties that are actually provided AND not empty strings
+    const updateData: any = {};
+
+    if (deviceData.name !== undefined) {
+      if (deviceData.name.trim() === "") {
+        throw new Error("Device name cannot be empty");
+      }
+      updateData.name = deviceData.name.trim();
+    }
+
+    if (deviceData.username !== undefined) {
+      if (deviceData.username.trim() === "") {
+        throw new Error("Device username cannot be empty");
+      }
+      updateData.username = deviceData.username.trim();
+    }
+
+    if (deviceData.password !== undefined) {
+      if (deviceData.password.trim() === "") {
+        throw new Error("Device password cannot be empty");
+      }
+      updateData.password = deviceData.password.trim();
+    }
+
+    if (deviceData.description !== undefined) {
+      // Description can be empty (null)
+      updateData.description = deviceData.description.trim() || null;
+    }
+
+    // If no valid fields to update, throw error
+    if (Object.keys(updateData).length === 0) {
+      throw new Error("No valid fields to update");
+    }
+
     const updatedDevice = await prisma.device.update({
       where: { id },
-      data: {
-        ...(deviceData.name && { name: deviceData.name }),
-        ...(deviceData.username && { username: deviceData.username }),
-        ...(deviceData.password && { password: deviceData.password }),
-        ...(deviceData.description !== undefined && {
-          description: deviceData.description,
-        }),
-      },
+      data: updateData,
     });
 
     logger.info(`Successfully updated device with ID: ${id}`);
@@ -107,6 +155,12 @@ export const updateDevice = async (
       const field = error.meta?.target?.[0] || "field";
       logger.warn(`Device update failed: ${field} already exists`);
       throw new Error(`A device with this ${field} already exists`);
+    }
+
+    // Handle case where device doesn't exist
+    if (error.code === "P2025") {
+      logger.warn(`Device update failed: Device not found with ID: ${id}`);
+      throw new Error(`Device not found with ID: ${id}`);
     }
 
     logger.error(`Failed to update device with ID: ${id}`, error);
@@ -145,6 +199,12 @@ export const deleteDevice = async (id: string) => {
     logger.info(`Successfully deleted device with ID: ${id}`);
     return { id };
   } catch (error: any) {
+    // Handle case where device doesn't exist
+    if (error.code === "P2025") {
+      logger.warn(`Device deletion failed: Device not found with ID: ${id}`);
+      throw new Error(`Device not found with ID: ${id}`);
+    }
+
     logger.error(`Failed to delete device with ID: ${id}`, error);
     throw error;
   }

@@ -30,10 +30,25 @@ class Logger {
     console.warn(this.formatMessage(LogLevel.WARN, message), ...meta);
   }
 
-  error(message: string, error?: Error, ...meta: any[]): void {
+  error(message: string, error?: Error | string | any, ...meta: any[]): void {
+    let errorDetails = "";
+
+    if (error) {
+      if (error instanceof Error) {
+        errorDetails = ` | Error: ${error.message} | Stack: ${
+          error.stack || "No stack trace"
+        }`;
+      } else if (typeof error === "string") {
+        errorDetails = ` | Error: ${error}`;
+      } else {
+        // Handle case where error might be an object with message property
+        const errMsg = error.message || JSON.stringify(error);
+        errorDetails = ` | Error: ${errMsg}`;
+      }
+    }
+
     console.error(
-      this.formatMessage(LogLevel.ERROR, message),
-      error ? { message: error.message, stack: error.stack } : "",
+      this.formatMessage(LogLevel.ERROR, `${message}${errorDetails}`),
       ...meta
     );
   }

@@ -15,6 +15,21 @@ const QoSUpdateSchema = t.Object({
   }),
 });
 
+// Parameter schema with additional validation
+const IdParamSchema = t.Object({
+  id: t.String({
+    minLength: 1,
+    error: "The subscription ID field cannot be empty",
+  }),
+});
+
+const DeviceIdParamSchema = t.Object({
+  deviceId: t.String({
+    minLength: 1,
+    error: "The device ID field cannot be empty",
+  }),
+});
+
 export const subscriptionRoutes = new Elysia({ prefix: "/subscriptions" })
   .post(
     "/",
@@ -23,32 +38,11 @@ export const subscriptionRoutes = new Elysia({ prefix: "/subscriptions" })
         `Received request to create a new subscription for device: ${body.deviceId} to topic: ${body.topicPath}`
       );
 
-      try {
-        const result = await subscriptionController.createSubscription(body);
-        return { success: true, data: result };
-      } catch (error: any) {
-        logger.error(
-          `Error processing create subscription request for device: ${body.deviceId}`,
-          error
-        );
+      const result = await subscriptionController.createSubscription(body);
+      set.status = result.statusCode;
 
-        // Set appropriate status code based on error type
-        if (
-          error.message.includes("not found") ||
-          error.message.includes("Invalid device ID")
-        ) {
-          set.status = 404; // Not Found
-        } else if (error.message.includes("already exists")) {
-          set.status = 409; // Conflict
-        } else {
-          set.status = 500; // Internal Server Error
-        }
-
-        return {
-          success: false,
-          error: error.message || "Failed to create subscription",
-        };
-      }
+      const { success, data, error } = result;
+      return { success, data, error };
     },
     {
       body: SubscriptionSchema,
@@ -68,37 +62,16 @@ export const subscriptionRoutes = new Elysia({ prefix: "/subscriptions" })
         `Received request to get subscriptions for device: ${deviceId}`
       );
 
-      try {
-        const result = await subscriptionController.getDeviceSubscriptions(
-          deviceId
-        );
-        return { success: true, data: result };
-      } catch (error: any) {
-        logger.error(
-          `Error processing get subscriptions request for device: ${deviceId}`,
-          error
-        );
+      const result = await subscriptionController.getDeviceSubscriptions(
+        deviceId
+      );
+      set.status = result.statusCode;
 
-        // Set appropriate status code based on error type
-        if (error.message.includes("not found")) {
-          set.status = 404; // Not Found
-        } else {
-          set.status = 500; // Internal Server Error
-        }
-
-        return {
-          success: false,
-          error: error.message || "Failed to fetch subscriptions",
-        };
-      }
+      const { success, data, error } = result;
+      return { success, data, error };
     },
     {
-      params: t.Object({
-        deviceId: t.String({
-          minLength: 1,
-          error: "The device ID field cannot be empty",
-        }),
-      }),
+      params: DeviceIdParamSchema,
       detail: {
         tags: ["Subscriptions"],
         summary: "Get device subscriptions",
@@ -112,37 +85,14 @@ export const subscriptionRoutes = new Elysia({ prefix: "/subscriptions" })
       const { id } = params;
       logger.info(`Received request to get subscription with ID: ${id}`);
 
-      try {
-        const subscription = await subscriptionController.getSubscriptionById(
-          id
-        );
+      const result = await subscriptionController.getSubscriptionById(id);
+      set.status = result.statusCode;
 
-        if (!subscription) {
-          logger.warn(`Subscription not found with ID: ${id}`);
-          set.status = 404;
-          return { success: false, error: "Subscription not found" };
-        }
-
-        return { success: true, data: subscription };
-      } catch (error: any) {
-        logger.error(
-          `Error processing get subscription request for ID: ${id}`,
-          error
-        );
-        set.status = 500;
-        return {
-          success: false,
-          error: error.message || "Failed to fetch subscription",
-        };
-      }
+      const { success, data, error } = result;
+      return { success, data, error };
     },
     {
-      params: t.Object({
-        id: t.String({
-          minLength: 1,
-          error: "The subscription ID field cannot be empty",
-        }),
-      }),
+      params: IdParamSchema,
       detail: {
         tags: ["Subscriptions"],
         summary: "Get subscription by ID",
@@ -157,35 +107,14 @@ export const subscriptionRoutes = new Elysia({ prefix: "/subscriptions" })
       const { qos } = body;
       logger.info(`Received request to update subscription with ID: ${id}`);
 
-      try {
-        const result = await subscriptionController.updateSubscription(id, qos);
-        return { success: true, data: result };
-      } catch (error: any) {
-        logger.error(
-          `Error processing update subscription request for ID: ${id}`,
-          error
-        );
+      const result = await subscriptionController.updateSubscription(id, qos);
+      set.status = result.statusCode;
 
-        // Set appropriate status code based on error type
-        if (error.message.includes("not found")) {
-          set.status = 404; // Not Found
-        } else {
-          set.status = 500; // Internal Server Error
-        }
-
-        return {
-          success: false,
-          error: error.message || "Failed to update subscription",
-        };
-      }
+      const { success, data, error } = result;
+      return { success, data, error };
     },
     {
-      params: t.Object({
-        id: t.String({
-          minLength: 1,
-          error: "The subscription ID field cannot be empty",
-        }),
-      }),
+      params: IdParamSchema,
       body: QoSUpdateSchema,
       detail: {
         tags: ["Subscriptions"],
@@ -200,35 +129,14 @@ export const subscriptionRoutes = new Elysia({ prefix: "/subscriptions" })
       const { id } = params;
       logger.info(`Received request to delete subscription with ID: ${id}`);
 
-      try {
-        const result = await subscriptionController.deleteSubscription(id);
-        return { success: true, data: result };
-      } catch (error: any) {
-        logger.error(
-          `Error processing delete subscription request for ID: ${id}`,
-          error
-        );
+      const result = await subscriptionController.deleteSubscription(id);
+      set.status = result.statusCode;
 
-        // Set appropriate status code based on error type
-        if (error.message.includes("not found")) {
-          set.status = 404; // Not Found
-        } else {
-          set.status = 500; // Internal Server Error
-        }
-
-        return {
-          success: false,
-          error: error.message || "Failed to delete subscription",
-        };
-      }
+      const { success, data, error } = result;
+      return { success, data, error };
     },
     {
-      params: t.Object({
-        id: t.String({
-          minLength: 1,
-          error: "The subscription ID field cannot be empty",
-        }),
-      }),
+      params: IdParamSchema,
       detail: {
         tags: ["Subscriptions"],
         summary: "Delete a subscription",

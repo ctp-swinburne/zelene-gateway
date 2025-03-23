@@ -25,9 +25,12 @@ export const app = new Elysia()
       },
     })
   )
-  .onError(({ code, error, set }) => {
+  .onError(({ code, error, set, request }) => {
+    // Get the route path for better error context
+    const path = request.url || "unknown path";
+
     if (code === "VALIDATION") {
-      logger.warn(`Validation error: ${JSON.stringify(error.all)}`);
+      logger.warn(`Validation error at ${path}: ${JSON.stringify(error.all)}`);
       set.status = 400;
 
       return {
@@ -37,11 +40,22 @@ export const app = new Elysia()
       };
     }
 
+    // Handle not found errors specifically
+    if (code === "NOT_FOUND") {
+      logger.warn(`Route not found: ${path}`);
+      set.status = 404;
+
+      return {
+        success: false,
+        error: "Resource not found",
+      };
+    }
+
     // Safely handle error message with fallback
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error occurred";
 
-    logger.error(`Unhandled error: ${errorMessage}`);
+    logger.error(`Unhandled error at ${path}:`, error);
     set.status = 500;
 
     return {

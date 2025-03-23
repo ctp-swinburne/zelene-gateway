@@ -14,30 +14,25 @@ const DeviceUpdateSchema = t.Object({
   description: t.Optional(t.String()),
 });
 
+// Parameter schema with additional validation
+const IdParamSchema = t.Object({
+  id: t.String({
+    minLength: 1,
+    error: "The device ID field cannot be empty",
+  }),
+});
+
 export const deviceRoutes = new Elysia({ prefix: "/devices" })
   .post(
     "/",
     async ({ body, set }): Promise<ApiResponse<any>> => {
       logger.info("Received request to create a new device");
 
-      try {
-        const result = await deviceController.createDevice(body);
-        return { success: true, data: result };
-      } catch (error: any) {
-        logger.error("Error processing create device request", error);
+      const result = await deviceController.createDevice(body);
+      set.status = result.statusCode;
 
-        // Set appropriate status code based on error type
-        if (error.message.includes("already exists")) {
-          set.status = 409; // Conflict
-        } else {
-          set.status = 500; // Internal Server Error
-        }
-
-        return {
-          success: false,
-          error: error.message || "Failed to create device",
-        };
-      }
+      const { success, data, error } = result;
+      return { success, data, error };
     },
     {
       body: DeviceSchema,
@@ -53,17 +48,11 @@ export const deviceRoutes = new Elysia({ prefix: "/devices" })
     async ({ set }): Promise<ApiResponse<any>> => {
       logger.info("Received request to get all devices");
 
-      try {
-        const result = await deviceController.getAllDevices();
-        return { success: true, data: result };
-      } catch (error: any) {
-        logger.error("Error processing get all devices request", error);
-        set.status = 500;
-        return {
-          success: false,
-          error: error.message || "Failed to fetch devices",
-        };
-      }
+      const result = await deviceController.getAllDevices();
+      set.status = result.statusCode;
+
+      const { success, data, error } = result;
+      return { success, data, error };
     },
     {
       detail: {
@@ -79,35 +68,14 @@ export const deviceRoutes = new Elysia({ prefix: "/devices" })
       const { id } = params;
       logger.info(`Received request to get device with ID: ${id}`);
 
-      try {
-        const device = await deviceController.getDeviceById(id);
+      const result = await deviceController.getDeviceById(id);
+      set.status = result.statusCode;
 
-        if (!device) {
-          logger.warn(`Device not found with ID: ${id}`);
-          set.status = 404;
-          return { success: false, error: "Device not found" };
-        }
-
-        return { success: true, data: device };
-      } catch (error: any) {
-        logger.error(
-          `Error processing get device request for ID: ${id}`,
-          error
-        );
-        set.status = 500;
-        return {
-          success: false,
-          error: error.message || "Failed to fetch device",
-        };
-      }
+      const { success, data, error } = result;
+      return { success, data, error };
     },
     {
-      params: t.Object({
-        id: t.String({
-          minLength: 1,
-          error: "The device ID field cannot be empty",
-        }),
-      }),
+      params: IdParamSchema,
       detail: {
         tags: ["Devices"],
         summary: "Get device by ID",
@@ -121,37 +89,14 @@ export const deviceRoutes = new Elysia({ prefix: "/devices" })
       const { id } = params;
       logger.info(`Received request to update device with ID: ${id}`);
 
-      try {
-        const result = await deviceController.updateDevice(id, body);
-        return { success: true, data: result };
-      } catch (error: any) {
-        logger.error(
-          `Error processing update device request for ID: ${id}`,
-          error
-        );
+      const result = await deviceController.updateDevice(id, body);
+      set.status = result.statusCode;
 
-        // Set appropriate status code based on error type
-        if (error.message.includes("not found")) {
-          set.status = 404; // Not Found
-        } else if (error.message.includes("already exists")) {
-          set.status = 409; // Conflict
-        } else {
-          set.status = 500; // Internal Server Error
-        }
-
-        return {
-          success: false,
-          error: error.message || "Failed to update device",
-        };
-      }
+      const { success, data, error } = result;
+      return { success, data, error };
     },
     {
-      params: t.Object({
-        id: t.String({
-          minLength: 1,
-          error: "The device ID field cannot be empty",
-        }),
-      }),
+      params: IdParamSchema,
       body: DeviceUpdateSchema,
       detail: {
         tags: ["Devices"],
@@ -166,35 +111,14 @@ export const deviceRoutes = new Elysia({ prefix: "/devices" })
       const { id } = params;
       logger.info(`Received request to delete device with ID: ${id}`);
 
-      try {
-        const result = await deviceController.deleteDevice(id);
-        return { success: true, data: result };
-      } catch (error: any) {
-        logger.error(
-          `Error processing delete device request for ID: ${id}`,
-          error
-        );
+      const result = await deviceController.deleteDevice(id);
+      set.status = result.statusCode;
 
-        // Set appropriate status code based on error type
-        if (error.message.includes("not found")) {
-          set.status = 404; // Not Found
-        } else {
-          set.status = 500; // Internal Server Error
-        }
-
-        return {
-          success: false,
-          error: error.message || "Failed to delete device",
-        };
-      }
+      const { success, data, error } = result;
+      return { success, data, error };
     },
     {
-      params: t.Object({
-        id: t.String({
-          minLength: 1,
-          error: "The device ID field cannot be empty",
-        }),
-      }),
+      params: IdParamSchema,
       detail: {
         tags: ["Devices"],
         summary: "Delete a device",

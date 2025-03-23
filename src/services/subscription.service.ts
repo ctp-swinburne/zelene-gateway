@@ -17,10 +17,16 @@ const logger = createLogger("SubscriptionService");
 async function getOrCreateTopic(topicPath: string, description?: string) {
   logger.info(`Getting or creating topic: ${topicPath}`);
 
+  // Validate topic path is not empty
+  if (!topicPath || topicPath.trim() === "") {
+    logger.warn("Topic path cannot be empty");
+    throw new Error("Topic path cannot be empty");
+  }
+
   try {
     // Try to find existing topic
     let topic = await prisma.topic.findUnique({
-      where: { topicPath },
+      where: { topicPath: topicPath.trim() },
     });
 
     // Create if it doesn't exist
@@ -39,8 +45,8 @@ async function getOrCreateTopic(topicPath: string, description?: string) {
 
       topic = await prisma.topic.create({
         data: {
-          topicPath,
-          description,
+          topicPath: topicPath.trim(),
+          description: description ? description.trim() : null,
           isPublic: true,
           allowSubscribe: true,
         },
@@ -61,9 +67,20 @@ export const createSubscription = async (subscriptionData: SubscriptionDto) => {
     `Creating subscription for device: ${subscriptionData.deviceId} to topic: ${subscriptionData.topicPath}`
   );
 
+  // Validate required fields
+  if (!subscriptionData.deviceId || subscriptionData.deviceId.trim() === "") {
+    logger.warn("Device ID cannot be empty");
+    throw new Error("Device ID cannot be empty");
+  }
+
+  if (!subscriptionData.topicPath || subscriptionData.topicPath.trim() === "") {
+    logger.warn("Topic path cannot be empty");
+    throw new Error("Topic path cannot be empty");
+  }
+
   try {
     // Verify the device exists before attempting to create subscription
-    const device = await getDeviceById(subscriptionData.deviceId);
+    const device = await getDeviceById(subscriptionData.deviceId.trim());
     if (!device) {
       logger.warn(`Device not found with ID: ${subscriptionData.deviceId}`);
       throw new Error(`Device not found with ID: ${subscriptionData.deviceId}`);
@@ -85,7 +102,7 @@ export const createSubscription = async (subscriptionData: SubscriptionDto) => {
     // Create the subscription
     const subscription = await prisma.subscription.create({
       data: {
-        deviceId: subscriptionData.deviceId,
+        deviceId: subscriptionData.deviceId.trim(),
         topicId: topic.id,
         qos: subscriptionData.qos || 0,
       },
@@ -125,16 +142,22 @@ export const createSubscription = async (subscriptionData: SubscriptionDto) => {
 export const getDeviceSubscriptions = async (deviceId: string) => {
   logger.info(`Fetching subscriptions for device: ${deviceId}`);
 
+  // Validate device ID
+  if (!deviceId || deviceId.trim() === "") {
+    logger.warn("Device ID cannot be empty");
+    throw new Error("Device ID cannot be empty");
+  }
+
   try {
     // Verify the device exists before fetching subscriptions
-    const device = await getDeviceById(deviceId);
+    const device = await getDeviceById(deviceId.trim());
     if (!device) {
       logger.warn(`Device not found with ID: ${deviceId}`);
       throw new Error(`Device not found with ID: ${deviceId}`);
     }
 
     const subscriptions = await prisma.subscription.findMany({
-      where: { deviceId },
+      where: { deviceId: deviceId.trim() },
       include: {
         topic: true,
       },
@@ -156,9 +179,15 @@ export const getDeviceSubscriptions = async (deviceId: string) => {
 export const getSubscriptionById = async (id: string) => {
   logger.info(`Fetching subscription with ID: ${id}`);
 
+  // Validate subscription ID
+  if (!id || id.trim() === "") {
+    logger.warn("Subscription ID cannot be empty");
+    return null;
+  }
+
   try {
     const subscription = await prisma.subscription.findUnique({
-      where: { id },
+      where: { id: id.trim() },
       include: {
         topic: true,
         device: true,
@@ -181,6 +210,18 @@ export const getSubscriptionById = async (id: string) => {
 export const updateSubscription = async (id: string, qos: number) => {
   logger.info(`Updating subscription with ID: ${id}`);
 
+  // Validate subscription ID
+  if (!id || id.trim() === "") {
+    logger.warn("Subscription ID cannot be empty");
+    throw new Error("Subscription ID cannot be empty");
+  }
+
+  // Validate QoS
+  if (typeof qos !== "number" || qos < 0 || qos > 2) {
+    logger.warn(`Invalid QoS value: ${qos}. Must be 0, 1, or 2`);
+    throw new Error(`Invalid QoS value: ${qos}. Must be 0, 1, or 2`);
+  }
+
   try {
     // Verify the subscription exists
     const subscription = await getSubscriptionById(id);
@@ -191,7 +232,7 @@ export const updateSubscription = async (id: string, qos: number) => {
 
     // Update the subscription
     const updatedSubscription = await prisma.subscription.update({
-      where: { id },
+      where: { id: id.trim() },
       data: {
         qos,
       },
@@ -204,6 +245,14 @@ export const updateSubscription = async (id: string, qos: number) => {
     logger.info(`Successfully updated subscription with ID: ${id}`);
     return updatedSubscription;
   } catch (error: any) {
+    // Handle case where subscription doesn't exist
+    if (error.code === "P2025") {
+      logger.warn(
+        `Subscription update failed: Subscription not found with ID: ${id}`
+      );
+      throw new Error(`Subscription not found with ID: ${id}`);
+    }
+
     logger.error(`Failed to update subscription with ID: ${id}`, error);
     throw error;
   }
@@ -211,6 +260,12 @@ export const updateSubscription = async (id: string, qos: number) => {
 
 export const deleteSubscription = async (id: string) => {
   logger.info(`Deleting subscription with ID: ${id}`);
+
+  // Validate subscription ID
+  if (!id || id.trim() === "") {
+    logger.warn("Subscription ID cannot be empty");
+    throw new Error("Subscription ID cannot be empty");
+  }
 
   try {
     // Verify the subscription exists
@@ -222,12 +277,20 @@ export const deleteSubscription = async (id: string) => {
 
     // Delete the subscription
     await prisma.subscription.delete({
-      where: { id },
+      where: { id: id.trim() },
     });
 
     logger.info(`Successfully deleted subscription with ID: ${id}`);
     return { id };
   } catch (error: any) {
+    // Handle case where subscription doesn't exist
+    if (error.code === "P2025") {
+      logger.warn(
+        `Subscription deletion failed: Subscription not found with ID: ${id}`
+      );
+      throw new Error(`Subscription not found with ID: ${id}`);
+    }
+
     logger.error(`Failed to delete subscription with ID: ${id}`, error);
     throw error;
   }

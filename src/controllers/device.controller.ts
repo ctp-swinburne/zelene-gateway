@@ -18,10 +18,21 @@ export const deviceController = {
     try {
       const device = await createDevice(body);
       logger.info(`Device created successfully with ID: ${device.id}`);
-      return { success: true, data: device };
+      return { success: true, data: device, statusCode: 201 };
     } catch (error: any) {
       logger.error("Failed to create device", error);
-      throw error;
+
+      // Determine appropriate status code
+      let statusCode = 500;
+      if (error.message?.toLowerCase().includes("already exists")) {
+        statusCode = 409; // Conflict
+      }
+
+      return {
+        success: false,
+        error: error.message || "Failed to create device",
+        statusCode,
+      };
     }
   },
 
@@ -33,14 +44,22 @@ export const deviceController = {
 
       if (!device) {
         logger.warn(`Device not found with ID: ${id}`);
-        return null;
+        return {
+          success: false,
+          error: "Device not found",
+          statusCode: 404,
+        };
       }
 
       logger.info(`Successfully fetched device with ID: ${id}`);
-      return device;
+      return { success: true, data: device, statusCode: 200 };
     } catch (error: any) {
       logger.error(`Failed to fetch device with ID: ${id}`, error);
-      throw error;
+      return {
+        success: false,
+        error: error.message || "Failed to fetch device",
+        statusCode: 500,
+      };
     }
   },
 
@@ -50,10 +69,14 @@ export const deviceController = {
     try {
       const devices = await getAllDevices();
       logger.info(`Successfully fetched ${devices.length} devices`);
-      return { success: true, data: devices };
+      return { success: true, data: devices, statusCode: 200 };
     } catch (error: any) {
       logger.error("Failed to fetch all devices", error);
-      throw error;
+      return {
+        success: false,
+        error: error.message || "Failed to fetch all devices",
+        statusCode: 500,
+      };
     }
   },
 
@@ -61,12 +84,34 @@ export const deviceController = {
     logger.info(`Handling request to update device with ID: ${id}`);
 
     try {
+      // First check if the device exists
+      const existingDevice = await getDeviceById(id);
+      if (!existingDevice) {
+        logger.warn(`Device not found with ID: ${id}`);
+        return {
+          success: false,
+          error: "Device not found",
+          statusCode: 404,
+        };
+      }
+
       const device = await updateDevice(id, body);
       logger.info(`Device updated successfully with ID: ${id}`);
-      return { success: true, data: device };
+      return { success: true, data: device, statusCode: 200 };
     } catch (error: any) {
       logger.error(`Failed to update device with ID: ${id}`, error);
-      throw error;
+
+      // Determine appropriate status code
+      let statusCode = 500;
+      if (error.message?.toLowerCase().includes("already exists")) {
+        statusCode = 409; // Conflict
+      }
+
+      return {
+        success: false,
+        error: error.message || "Failed to update device",
+        statusCode,
+      };
     }
   },
 
@@ -74,12 +119,27 @@ export const deviceController = {
     logger.info(`Handling request to delete device with ID: ${id}`);
 
     try {
+      // First check if the device exists
+      const existingDevice = await getDeviceById(id);
+      if (!existingDevice) {
+        logger.warn(`Device not found with ID: ${id}`);
+        return {
+          success: false,
+          error: "Device not found",
+          statusCode: 404,
+        };
+      }
+
       const result = await deleteDevice(id);
       logger.info(`Device deleted successfully with ID: ${id}`);
-      return { success: true, data: result };
+      return { success: true, data: result, statusCode: 200 };
     } catch (error: any) {
       logger.error(`Failed to delete device with ID: ${id}`, error);
-      throw error;
+      return {
+        success: false,
+        error: error.message || "Failed to delete device",
+        statusCode: 500,
+      };
     }
   },
 };

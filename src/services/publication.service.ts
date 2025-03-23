@@ -7,44 +7,10 @@ import {
 } from "../types/mqtt";
 import { createLogger } from "../utils/logger";
 import { getDeviceById } from "./device.service";
-import {
-  getDeviceSubscriptions,
-  getOrCreateTopic,
-} from "./subscription.service";
-import { matchTopic } from "../utils/mqtt-pattern";
+import { getOrCreateTopic } from "./subscription.service";
 
 const prisma = new PrismaClient();
 const logger = createLogger("PublicationService");
-
-// In-memory message bus for subscribers
-// In a real-world scenario, this would be replaced with an actual MQTT broker
-type MessageCallback = (message: MqttMessage) => void;
-const subscribers: Map<string, MessageCallback[]> = new Map();
-
-/**
- * Subscribe to message notifications
- * @param clientId A unique identifier for the subscriber
- * @param callback Function to call when a matching message is published
- */
-export const subscribeToMessages = (
-  clientId: string,
-  callback: MessageCallback
-) => {
-  if (!subscribers.has(clientId)) {
-    subscribers.set(clientId, []);
-  }
-  subscribers.get(clientId)?.push(callback);
-  logger.info(`Client ${clientId} subscribed to message notifications`);
-};
-
-/**
- * Unsubscribe from message notifications
- * @param clientId The client ID to unsubscribe
- */
-export const unsubscribeFromMessages = (clientId: string) => {
-  subscribers.delete(clientId);
-  logger.info(`Client ${clientId} unsubscribed from message notifications`);
-};
 
 /**
  * Publish a message to a topic
@@ -56,9 +22,28 @@ export const publishToTopic = async (publicationData: PublicationDto) => {
     `Publishing message from device: ${publicationData.deviceId} to topic: ${publicationData.topicPath}`
   );
 
+  // Validate required fields
+  if (!publicationData.deviceId || publicationData.deviceId.trim() === "") {
+    logger.warn("Device ID cannot be empty");
+    throw new Error("Device ID cannot be empty");
+  }
+
+  if (!publicationData.topicPath || publicationData.topicPath.trim() === "") {
+    logger.warn("Topic path cannot be empty");
+    throw new Error("Topic path cannot be empty");
+  }
+
+  if (
+    publicationData.payload === undefined ||
+    publicationData.payload === null
+  ) {
+    logger.warn("Payload cannot be empty");
+    throw new Error("Payload cannot be empty");
+  }
+
   try {
     // Verify the device exists before publishing
-    const device = await getDeviceById(publicationData.deviceId);
+    const device = await getDeviceById(publicationData.deviceId.trim());
     if (!device) {
       logger.warn(`Device not found with ID: ${publicationData.deviceId}`);
       throw new Error(`Device not found with ID: ${publicationData.deviceId}`);
@@ -67,8 +52,8 @@ export const publishToTopic = async (publicationData: PublicationDto) => {
     // Check if this is a scheduled publication
     if (publicationData.scheduleTime) {
       return await schedulePublication({
-        deviceId: publicationData.deviceId,
-        topicPath: publicationData.topicPath,
+        deviceId: publicationData.deviceId.trim(),
+        topicPath: publicationData.topicPath.trim(),
         payload: publicationData.payload,
         qos: publicationData.qos,
         retain: publicationData.retain,
@@ -77,7 +62,7 @@ export const publishToTopic = async (publicationData: PublicationDto) => {
     }
 
     // Get or create the topic
-    const topic = await getOrCreateTopic(publicationData.topicPath);
+    const topic = await getOrCreateTopic(publicationData.topicPath.trim());
 
     // Check if topic is public for publishing
     if (!topic.isPublic) {
@@ -92,7 +77,7 @@ export const publishToTopic = async (publicationData: PublicationDto) => {
     // Create the publication record
     const publication = await prisma.publication.create({
       data: {
-        deviceId: publicationData.deviceId,
+        deviceId: publicationData.deviceId.trim(),
         topicId: topic.id,
         payload: publicationData.payload,
         qos: publicationData.qos || 0,
@@ -103,25 +88,15 @@ export const publishToTopic = async (publicationData: PublicationDto) => {
       },
     });
 
-    // Create the message object
-    const message: MqttMessage = {
-      topic: topic.topicPath,
-      payload: publicationData.payload,
-      qos: publicationData.qos || 0,
-      retain: publicationData.retain || false,
-      deviceId: publicationData.deviceId,
-      timestamp: new Date(),
-    };
-
-    // Deliver to all matching subscriptions
-    await deliverMessageToSubscribers(message);
-
-    // Notify all in-memory subscribers
-    notifySubscribers(message);
-
     logger.info(
       `Successfully published message to topic: ${publicationData.topicPath}`
     );
+
+    // Only log the publication event, no need to actually deliver to subscribers
+    logger.info(
+      `Message would be delivered to subscribers of topic: ${topic.topicPath}`
+    );
+
     return publication;
   } catch (error: any) {
     logger.error(
@@ -144,9 +119,41 @@ export const schedulePublication = async (
     `Scheduling publication from device: ${scheduledPublicationData.deviceId} to topic: ${scheduledPublicationData.topicPath} at: ${scheduledPublicationData.scheduledTime}`
   );
 
+  // Validate required fields
+  if (
+    !scheduledPublicationData.deviceId ||
+    scheduledPublicationData.deviceId.trim() === ""
+  ) {
+    logger.warn("Device ID cannot be empty");
+    throw new Error("Device ID cannot be empty");
+  }
+
+  if (
+    !scheduledPublicationData.topicPath ||
+    scheduledPublicationData.topicPath.trim() === ""
+  ) {
+    logger.warn("Topic path cannot be empty");
+    throw new Error("Topic path cannot be empty");
+  }
+
+  if (
+    scheduledPublicationData.payload === undefined ||
+    scheduledPublicationData.payload === null
+  ) {
+    logger.warn("Payload cannot be empty");
+    throw new Error("Payload cannot be empty");
+  }
+
+  if (!scheduledPublicationData.scheduledTime) {
+    logger.warn("Scheduled time cannot be empty");
+    throw new Error("Scheduled time cannot be empty");
+  }
+
   try {
     // Verify the device exists
-    const device = await getDeviceById(scheduledPublicationData.deviceId);
+    const device = await getDeviceById(
+      scheduledPublicationData.deviceId.trim()
+    );
     if (!device) {
       logger.warn(
         `Device not found with ID: ${scheduledPublicationData.deviceId}`
@@ -157,7 +164,9 @@ export const schedulePublication = async (
     }
 
     // Get or create the topic
-    const topic = await getOrCreateTopic(scheduledPublicationData.topicPath);
+    const topic = await getOrCreateTopic(
+      scheduledPublicationData.topicPath.trim()
+    );
 
     // Check if topic is public for publishing
     if (!topic.isPublic) {
@@ -185,23 +194,55 @@ export const schedulePublication = async (
     let scheduledPublication;
 
     if (scheduledPublicationData.id) {
+      // Validate ID if provided
+      if (scheduledPublicationData.id.trim() === "") {
+        logger.warn("Publication ID cannot be empty");
+        throw new Error("Publication ID cannot be empty");
+      }
+
+      // Check if the scheduled publication exists before updating
+      const existingPublication = await getScheduledPublicationById(
+        scheduledPublicationData.id.trim()
+      );
+      if (!existingPublication) {
+        logger.warn(
+          `Scheduled publication not found with ID: ${scheduledPublicationData.id}`
+        );
+        throw new Error(
+          `Scheduled publication not found with ID: ${scheduledPublicationData.id}`
+        );
+      }
+
       // Update existing scheduled publication
-      scheduledPublication = await prisma.scheduledPublication.update({
-        where: { id: scheduledPublicationData.id },
-        data: {
-          deviceId: scheduledPublicationData.deviceId,
-          topicId: topic.id,
-          payload: scheduledPublicationData.payload,
-          qos: scheduledPublicationData.qos || 0,
-          retain: scheduledPublicationData.retain || false,
-          scheduledTime,
-          status: "PENDING",
-          publishedAt: null,
-        },
-        include: {
-          topic: true,
-        },
-      });
+      try {
+        scheduledPublication = await prisma.scheduledPublication.update({
+          where: { id: scheduledPublicationData.id.trim() },
+          data: {
+            deviceId: scheduledPublicationData.deviceId.trim(),
+            topicId: topic.id,
+            payload: scheduledPublicationData.payload,
+            qos: scheduledPublicationData.qos || 0,
+            retain: scheduledPublicationData.retain || false,
+            scheduledTime,
+            status: "PENDING",
+            publishedAt: null,
+          },
+          include: {
+            topic: true,
+          },
+        });
+      } catch (error: any) {
+        // Handle case where publication doesn't exist
+        if (error.code === "P2025") {
+          logger.warn(
+            `Publication update failed: Publication not found with ID: ${scheduledPublicationData.id}`
+          );
+          throw new Error(
+            `Scheduled publication not found with ID: ${scheduledPublicationData.id}`
+          );
+        }
+        throw error;
+      }
 
       logger.info(
         `Updated scheduled publication with ID: ${scheduledPublication.id}`
@@ -210,7 +251,7 @@ export const schedulePublication = async (
       // Create new scheduled publication
       scheduledPublication = await prisma.scheduledPublication.create({
         data: {
-          deviceId: scheduledPublicationData.deviceId,
+          deviceId: scheduledPublicationData.deviceId.trim(),
           topicId: topic.id,
           payload: scheduledPublicationData.payload,
           qos: scheduledPublicationData.qos || 0,
@@ -249,10 +290,16 @@ export const updateScheduledPublication = async (
 ) => {
   logger.info(`Updating scheduled publication with ID: ${id}`);
 
+  // Validate ID
+  if (!id || id.trim() === "") {
+    logger.warn("Publication ID cannot be empty");
+    throw new Error("Publication ID cannot be empty");
+  }
+
   try {
     // Check if the scheduled publication exists
     const existingPublication = await prisma.scheduledPublication.findUnique({
-      where: { id },
+      where: { id: id.trim() },
       include: { topic: true },
     });
 
@@ -272,33 +319,50 @@ export const updateScheduledPublication = async (
 
     // Handle topic path change if provided
     let topicId = existingPublication.topicId;
-    if (
-      updateData.topicPath &&
-      updateData.topicPath !== existingPublication.topic.topicPath
-    ) {
-      // Get or create the new topic
-      const newTopic = await getOrCreateTopic(updateData.topicPath);
-      topicId = newTopic.id;
-      updatePayload.topicId = topicId;
+    if (updateData.topicPath !== undefined && updateData.topicPath !== null) {
+      // Validate topic path is not empty
+      if (updateData.topicPath.trim() === "") {
+        logger.warn("Topic path cannot be empty");
+        throw new Error("Topic path cannot be empty");
+      }
 
-      // Check if the new topic allows publications
-      if (!newTopic.isPublic) {
-        logger.warn(
-          `Topic is not public for publishing: ${updateData.topicPath}`
-        );
-        throw new Error(
-          `Topic is not public for publishing: ${updateData.topicPath}`
-        );
+      if (updateData.topicPath.trim() !== existingPublication.topic.topicPath) {
+        // Get or create the new topic
+        const newTopic = await getOrCreateTopic(updateData.topicPath.trim());
+        topicId = newTopic.id;
+        updatePayload.topicId = topicId;
+
+        // Check if the new topic allows publications
+        if (!newTopic.isPublic) {
+          logger.warn(
+            `Topic is not public for publishing: ${updateData.topicPath}`
+          );
+          throw new Error(
+            `Topic is not public for publishing: ${updateData.topicPath}`
+          );
+        }
       }
     }
 
     // Handle payload update if provided
     if (updateData.payload !== undefined) {
+      // Payload can be empty in some cases
       updatePayload.payload = updateData.payload;
     }
 
     // Handle QoS update if provided
     if (updateData.qos !== undefined) {
+      // Validate QoS
+      if (
+        typeof updateData.qos !== "number" ||
+        updateData.qos < 0 ||
+        updateData.qos > 2
+      ) {
+        logger.warn(`Invalid QoS value: ${updateData.qos}. Must be 0, 1, or 2`);
+        throw new Error(
+          `Invalid QoS value: ${updateData.qos}. Must be 0, 1, or 2`
+        );
+      }
       updatePayload.qos = updateData.qos;
     }
 
@@ -319,18 +383,34 @@ export const updateScheduledPublication = async (
       updatePayload.scheduledTime = scheduledTime;
     }
 
-    // Update the scheduled publication
-    const updatedPublication = await prisma.scheduledPublication.update({
-      where: { id },
-      data: updatePayload,
-      include: {
-        topic: true,
-        device: true,
-      },
-    });
+    // If no valid fields to update, throw error
+    if (Object.keys(updatePayload).length === 0) {
+      throw new Error("No valid fields to update");
+    }
 
-    logger.info(`Successfully updated scheduled publication with ID: ${id}`);
-    return updatedPublication;
+    // Update the scheduled publication
+    try {
+      const updatedPublication = await prisma.scheduledPublication.update({
+        where: { id: id.trim() },
+        data: updatePayload,
+        include: {
+          topic: true,
+          device: true,
+        },
+      });
+
+      logger.info(`Successfully updated scheduled publication with ID: ${id}`);
+      return updatedPublication;
+    } catch (error: any) {
+      // Handle case where publication doesn't exist
+      if (error.code === "P2025") {
+        logger.warn(
+          `Publication update failed: Publication not found with ID: ${id}`
+        );
+        throw new Error(`Scheduled publication not found with ID: ${id}`);
+      }
+      throw error;
+    }
   } catch (error: any) {
     logger.error(
       `Failed to update scheduled publication with ID: ${id}`,
@@ -353,7 +433,20 @@ export const getAllScheduledPublications = async (status?: string) => {
   );
 
   try {
-    const filter = status ? { status } : {};
+    const filter: any = {};
+    if (status) {
+      // Validate status
+      const validStatuses = ["PENDING", "PUBLISHED", "FAILED", "CANCELLED"];
+      if (!validStatuses.includes(status)) {
+        logger.warn(`Invalid status filter: ${status}`);
+        throw new Error(
+          `Invalid status filter: ${status}. Valid values are: ${validStatuses.join(
+            ", "
+          )}`
+        );
+      }
+      filter.status = status;
+    }
 
     const scheduledPublications = await prisma.scheduledPublication.findMany({
       where: filter,
@@ -390,9 +483,15 @@ export const getAllScheduledPublications = async (status?: string) => {
 export const getScheduledPublicationById = async (id: string) => {
   logger.info(`Fetching scheduled publication with ID: ${id}`);
 
+  // Validate ID
+  if (!id || id.trim() === "") {
+    logger.warn("Publication ID cannot be empty");
+    return null;
+  }
+
   try {
     const scheduledPublication = await prisma.scheduledPublication.findUnique({
-      where: { id },
+      where: { id: id.trim() },
       include: {
         topic: true,
         device: {
@@ -426,16 +525,22 @@ export const getScheduledPublicationById = async (id: string) => {
 export const getDeviceScheduledPublications = async (deviceId: string) => {
   logger.info(`Fetching scheduled publications for device: ${deviceId}`);
 
+  // Validate device ID
+  if (!deviceId || deviceId.trim() === "") {
+    logger.warn("Device ID cannot be empty");
+    throw new Error("Device ID cannot be empty");
+  }
+
   try {
     // Verify the device exists
-    const device = await getDeviceById(deviceId);
+    const device = await getDeviceById(deviceId.trim());
     if (!device) {
       logger.warn(`Device not found with ID: ${deviceId}`);
       throw new Error(`Device not found with ID: ${deviceId}`);
     }
 
     const scheduledPublications = await prisma.scheduledPublication.findMany({
-      where: { deviceId },
+      where: { deviceId: deviceId.trim() },
       include: {
         topic: true,
       },
@@ -465,9 +570,15 @@ export const getDeviceScheduledPublications = async (deviceId: string) => {
 export const cancelScheduledPublication = async (id: string) => {
   logger.info(`Canceling scheduled publication with ID: ${id}`);
 
+  // Validate ID
+  if (!id || id.trim() === "") {
+    logger.warn("Publication ID cannot be empty");
+    throw new Error("Publication ID cannot be empty");
+  }
+
   try {
     const scheduledPublication = await prisma.scheduledPublication.findUnique({
-      where: { id },
+      where: { id: id.trim() },
     });
 
     if (!scheduledPublication) {
@@ -482,18 +593,31 @@ export const cancelScheduledPublication = async (id: string) => {
     }
 
     // Update the status to cancelled
-    const cancelledPublication = await prisma.scheduledPublication.update({
-      where: { id },
-      data: {
-        status: "CANCELLED",
-      },
-      include: {
-        topic: true,
-      },
-    });
+    try {
+      const cancelledPublication = await prisma.scheduledPublication.update({
+        where: { id: id.trim() },
+        data: {
+          status: "CANCELLED",
+        },
+        include: {
+          topic: true,
+        },
+      });
 
-    logger.info(`Successfully cancelled scheduled publication with ID: ${id}`);
-    return cancelledPublication;
+      logger.info(
+        `Successfully cancelled scheduled publication with ID: ${id}`
+      );
+      return cancelledPublication;
+    } catch (error: any) {
+      // Handle case where publication doesn't exist
+      if (error.code === "P2025") {
+        logger.warn(
+          `Publication cancellation failed: Publication not found with ID: ${id}`
+        );
+        throw new Error(`Scheduled publication not found with ID: ${id}`);
+      }
+      throw error;
+    }
   } catch (error: any) {
     logger.error(
       `Failed to cancel scheduled publication with ID: ${id}`,
@@ -528,24 +652,15 @@ export const processScheduledPublications = async () => {
 
     logger.info(`Found ${duePublications.length} due publications to process`);
 
-    // Publish each due message
+    let processedCount = 0;
+
+    // Process each due publication (just mark as published)
     for (const publication of duePublications) {
       try {
-        // Create the message object
-        const message: MqttMessage = {
-          topic: publication.topic.topicPath,
-          payload: publication.payload,
-          qos: publication.qos,
-          retain: publication.retain,
-          deviceId: publication.deviceId,
-          timestamp: now,
-        };
-
-        // Deliver to subscribers
-        await deliverMessageToSubscribers(message);
-
-        // Notify in-memory subscribers
-        notifySubscribers(message);
+        // Log the publication (no actual delivery)
+        logger.info(
+          `Processing publication: ${publication.id} to topic: ${publication.topic.topicPath}`
+        );
 
         // Update the publication status
         await prisma.scheduledPublication.update({
@@ -557,11 +672,12 @@ export const processScheduledPublications = async () => {
         });
 
         logger.info(
-          `Successfully published scheduled message: ${publication.id}`
+          `Successfully marked scheduled message as published: ${publication.id}`
         );
+        processedCount++;
       } catch (error: any) {
         logger.error(
-          `Failed to publish scheduled message: ${publication.id}`,
+          `Failed to process scheduled message: ${publication.id}`,
           error
         );
 
@@ -575,56 +691,9 @@ export const processScheduledPublications = async () => {
       }
     }
 
-    return duePublications.length;
+    return processedCount;
   } catch (error: any) {
     logger.error("Failed to process scheduled publications", error);
     throw error;
   }
 };
-
-/**
- * Deliver a message to all relevant device subscriptions
- * This simulates what an MQTT broker would do
- */
-async function deliverMessageToSubscribers(message: MqttMessage) {
-  try {
-    // Get all devices with subscriptions
-    const allDevices = await prisma.device.findMany({
-      select: { id: true },
-    });
-
-    // Check each device's subscriptions for matches
-    for (const device of allDevices) {
-      const subscriptions = await getDeviceSubscriptions(device.id);
-
-      // Check if any subscription matches the published topic
-      for (const subscription of subscriptions) {
-        if (matchTopic(subscription.topic.topicPath, message.topic)) {
-          logger.info(
-            `Message delivered to device: ${device.id} subscribed to: ${subscription.topic.topicPath}`
-          );
-
-          // In a real system, this would actually deliver the message to the device
-          // For now, just log it
-        }
-      }
-    }
-  } catch (error: any) {
-    logger.error("Error delivering message to subscribers", error);
-  }
-}
-
-/**
- * Notify all in-memory subscribers
- */
-function notifySubscribers(message: MqttMessage) {
-  subscribers.forEach((callbacks, clientId) => {
-    callbacks.forEach((callback) => {
-      try {
-        callback(message);
-      } catch (error: any) {
-        logger.error(`Error notifying client ${clientId}`, error);
-      }
-    });
-  });
-}

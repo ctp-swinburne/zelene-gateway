@@ -23,10 +23,23 @@ export const publicationController = {
     try {
       const message = await publishToTopic(body);
       logger.info(`Message published successfully to topic: ${body.topicPath}`);
-      return { success: true, data: message };
+      return { success: true, data: message, statusCode: 200 };
     } catch (error: any) {
       logger.error(`Failed to publish to topic: ${body.topicPath}`, error);
-      throw error;
+
+      // Determine appropriate status code
+      let statusCode = 500;
+      if (error.message?.toLowerCase().includes("not found")) {
+        statusCode = 404; // Not Found
+      } else if (error.message?.toLowerCase().includes("not public")) {
+        statusCode = 403; // Forbidden
+      }
+
+      return {
+        success: false,
+        error: error.message || "Failed to publish to topic",
+        statusCode,
+      };
     }
   },
 
@@ -40,13 +53,30 @@ export const publicationController = {
       logger.info(
         `Publication scheduled successfully for topic: ${body.topicPath} at: ${body.scheduledTime}`
       );
-      return { success: true, data: scheduledPublication };
+      return { success: true, data: scheduledPublication, statusCode: 201 };
     } catch (error: any) {
       logger.error(
         `Failed to schedule publication to topic: ${body.topicPath}`,
         error
       );
-      throw error;
+
+      // Determine appropriate status code
+      let statusCode = 500;
+      if (error.message?.toLowerCase().includes("not found")) {
+        statusCode = 404; // Not Found
+      } else if (error.message?.toLowerCase().includes("not public")) {
+        statusCode = 403; // Forbidden
+      } else if (
+        error.message?.toLowerCase().includes("invalid scheduled time")
+      ) {
+        statusCode = 400; // Bad Request
+      }
+
+      return {
+        success: false,
+        error: error.message || "Failed to schedule publication",
+        statusCode,
+      };
     }
   },
 
@@ -59,18 +89,44 @@ export const publicationController = {
     );
 
     try {
+      // Check if the scheduled publication exists
+      const existingPublication = await getScheduledPublicationById(id);
+      if (!existingPublication) {
+        logger.warn(`Scheduled publication not found with ID: ${id}`);
+        return {
+          success: false,
+          error: "Scheduled publication not found",
+          statusCode: 404,
+        };
+      }
+
       const updatedPublication = await updateScheduledPublication(
         id,
         updateData
       );
       logger.info(`Successfully updated scheduled publication with ID: ${id}`);
-      return { success: true, data: updatedPublication };
+      return { success: true, data: updatedPublication, statusCode: 200 };
     } catch (error: any) {
       logger.error(
         `Failed to update scheduled publication with ID: ${id}`,
         error
       );
-      throw error;
+
+      // Determine appropriate status code
+      let statusCode = 500;
+      if (error.message?.toLowerCase().includes("already published")) {
+        statusCode = 400; // Bad Request
+      } else if (
+        error.message?.toLowerCase().includes("invalid scheduled time")
+      ) {
+        statusCode = 400; // Bad Request
+      }
+
+      return {
+        success: false,
+        error: error.message || "Failed to update scheduled publication",
+        statusCode,
+      };
     }
   },
 
@@ -82,17 +138,25 @@ export const publicationController = {
 
       if (!publication) {
         logger.warn(`Scheduled publication not found with ID: ${id}`);
-        return null;
+        return {
+          success: false,
+          error: "Scheduled publication not found",
+          statusCode: 404,
+        };
       }
 
       logger.info(`Successfully fetched scheduled publication with ID: ${id}`);
-      return { success: true, data: publication };
+      return { success: true, data: publication, statusCode: 200 };
     } catch (error: any) {
       logger.error(
         `Failed to fetch scheduled publication with ID: ${id}`,
         error
       );
-      throw error;
+      return {
+        success: false,
+        error: error.message || "Failed to fetch scheduled publication",
+        statusCode: 500,
+      };
     }
   },
 
@@ -108,10 +172,14 @@ export const publicationController = {
       logger.info(
         `Successfully fetched ${publications.length} scheduled publications`
       );
-      return { success: true, data: publications };
+      return { success: true, data: publications, statusCode: 200 };
     } catch (error: any) {
       logger.error(`Failed to fetch scheduled publications`, error);
-      throw error;
+      return {
+        success: false,
+        error: error.message || "Failed to fetch scheduled publications",
+        statusCode: 500,
+      };
     }
   },
 
@@ -127,13 +195,24 @@ export const publicationController = {
       logger.info(
         `Successfully fetched ${scheduledPublications.length} scheduled publications for device: ${deviceId}`
       );
-      return { success: true, data: scheduledPublications };
+      return { success: true, data: scheduledPublications, statusCode: 200 };
     } catch (error: any) {
       logger.error(
         `Failed to fetch scheduled publications for device: ${deviceId}`,
         error
       );
-      throw error;
+
+      // Determine appropriate status code
+      let statusCode = 500;
+      if (error.message?.toLowerCase().includes("not found")) {
+        statusCode = 404; // Not Found
+      }
+
+      return {
+        success: false,
+        error: error.message || "Failed to fetch scheduled publications",
+        statusCode,
+      };
     }
   },
 
@@ -143,17 +222,41 @@ export const publicationController = {
     );
 
     try {
+      // Check if the scheduled publication exists
+      const existingPublication = await getScheduledPublicationById(id);
+      if (!existingPublication) {
+        logger.warn(`Scheduled publication not found with ID: ${id}`);
+        return {
+          success: false,
+          error: "Scheduled publication not found",
+          statusCode: 404,
+        };
+      }
+
       const cancelledPublication = await cancelScheduledPublication(id);
       logger.info(
         `Successfully cancelled scheduled publication with ID: ${id}`
       );
-      return { success: true, data: cancelledPublication };
+      return { success: true, data: cancelledPublication, statusCode: 200 };
     } catch (error: any) {
       logger.error(
         `Failed to cancel scheduled publication with ID: ${id}`,
         error
       );
-      throw error;
+
+      // Determine appropriate status code
+      let statusCode = 500;
+      if (
+        error.message?.toLowerCase().includes("cannot cancel already published")
+      ) {
+        statusCode = 400; // Bad Request
+      }
+
+      return {
+        success: false,
+        error: error.message || "Failed to cancel scheduled publication",
+        statusCode,
+      };
     }
   },
 
@@ -165,10 +268,14 @@ export const publicationController = {
       logger.info(
         `Successfully processed ${processedCount} scheduled publications`
       );
-      return { success: true, data: { processedCount } };
+      return { success: true, data: { processedCount }, statusCode: 200 };
     } catch (error: any) {
       logger.error(`Failed to process scheduled publications`, error);
-      throw error;
+      return {
+        success: false,
+        error: error.message || "Failed to process scheduled publications",
+        statusCode: 500,
+      };
     }
   },
 };
