@@ -301,6 +301,11 @@ export async function subscribeToTopic(
 
     // Then add a new message handler
     client.on("message", (receivedTopic, payload) => {
+      // Log all incoming messages on subscribed topics
+      logger.info(
+        `MQTT message received: Topic: ${receivedTopic} | Device: ${deviceId}`
+      );
+
       // Check if this message is relevant to our subscribed topics
       if (matchTopic(topicPath, receivedTopic)) {
         handleMessage(deviceId, receivedTopic, payload);
