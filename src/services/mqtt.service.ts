@@ -164,12 +164,13 @@ async function processDeviceData(
         });
 
         if (deviceKey) {
-          // Store the data
+          // Store the data with topic information
           await prisma.deviceData.create({
             data: {
               deviceId,
               keyId: deviceKey.id,
               value: stringValue,
+              topic: topicPath, // Store the topic this data came from
               partition,
             },
           });
@@ -195,12 +196,13 @@ async function processDeviceData(
       });
 
       if (deviceKey) {
-        // Store the raw data
+        // Store the raw data with topic information
         await prisma.deviceData.create({
           data: {
             deviceId,
             keyId: deviceKey.id,
             value: payload,
+            topic: topicPath, // Store the topic this data came from
             partition,
           },
         });

@@ -5,6 +5,7 @@ import {
   initializeSubscriptions,
   disconnectAllDevices,
 } from "./services/mqtt.service";
+import { startScheduler, stopScheduler } from "./services/scheduler.service";
 
 const logger = createLogger("Server");
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 4000;
@@ -16,6 +17,9 @@ async function startServer() {
     // Initialize MQTT subscriptions
     logger.info("Initializing MQTT subscriptions...");
     await initializeSubscriptions();
+
+    // Start the publication scheduler
+    startScheduler();
 
     // Start the server
     const server = app.listen(PORT);
@@ -41,6 +45,10 @@ async function startServer() {
     const cleanup = async () => {
       logger.info("Shutting down server...");
       try {
+        // Stop the scheduler first
+        stopScheduler();
+
+        // Then disconnect MQTT clients
         await disconnectAllDevices();
         logger.info("All MQTT connections closed");
         process.exit(0);

@@ -11,6 +11,7 @@ import {
 } from "../services/publication.service";
 import { createLogger } from "../utils/logger";
 import { PublicationDto, ScheduledPublicationDto } from "../types/mqtt";
+import { convertBigIntToString } from "../utils/serializer";
 
 const logger = createLogger("PublicationController");
 
@@ -23,7 +24,11 @@ export const publicationController = {
     try {
       const message = await publishToTopic(body);
       logger.info(`Message published successfully to topic: ${body.topicPath}`);
-      return { success: true, data: message, statusCode: 200 };
+
+      // Convert BigInt values to strings before returning
+      const safeMessage = convertBigIntToString(message);
+
+      return { success: true, data: safeMessage, statusCode: 200 };
     } catch (error: any) {
       logger.error(`Failed to publish to topic: ${body.topicPath}`, error);
 

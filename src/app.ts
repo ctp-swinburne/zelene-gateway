@@ -3,8 +3,26 @@ import { Elysia } from "elysia";
 import { swagger } from "@elysiajs/swagger";
 import { apiRoutes } from "./routes/api.routes";
 import { createLogger } from "./utils/logger";
+import { bigintJsonReplacer } from "./utils/serializer";
 
 const logger = createLogger("App");
+
+// Create a BigInt serializer plugin
+const bigintSerializer = new Elysia().onTransform(({ response }) => {
+  // Skip if not an object or null
+  if (typeof response !== "object" || response === null) {
+    return response;
+  }
+
+  try {
+    // Transform the response by serializing and then parsing back with BigInt handling
+    const serialized = JSON.stringify(response, bigintJsonReplacer);
+    return JSON.parse(serialized);
+  } catch (error) {
+    logger.error("Failed to transform response with BigInt values", error);
+    return response;
+  }
+});
 
 // Create and configure the Elysia application
 export const app = new Elysia()
@@ -25,6 +43,8 @@ export const app = new Elysia()
       },
     })
   )
+  // Add BigInt serialization
+  .use(bigintSerializer)
   .onError(({ code, error, set, request }) => {
     // Get the route path for better error context
     const path = request.url || "unknown path";

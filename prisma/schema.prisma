@@ -58,7 +58,11 @@ model Publication {
   payload   String // The message payload
   qos       Int      @default(0) // MQTT QoS level (0, 1, or 2)
   retain    Boolean  @default(false) // Whether the message should be retained
+  partition BigInt // UNIX timestamp of the month - for efficient querying
   createdAt DateTime @default(now())
+
+  @@index([deviceId, partition])
+  @@index([topicId, partition])
 }
 
 model ScheduledPublication {
@@ -72,7 +76,7 @@ model ScheduledPublication {
   retain        Boolean   @default(false) // Whether the message should be retained
   scheduledTime DateTime // When to publish the message
   publishedAt   DateTime? // When the message was actually published (null if not yet published)
-  status        String    @default("PENDING") // PENDING, PUBLISHED, FAILED
+  status        String    @default("PENDING") // PENDING, PUBLISHED, FAILED, CANCELLED
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -98,9 +102,11 @@ model DeviceData {
   key       DeviceKey? @relation(fields: [keyId], references: [id], onDelete: SetNull)
   keyId     String?
   value     String
+  topic     String? // Store which topic the data came from
   partition BigInt // UNIX timestamp of the month
   timestamp DateTime   @default(now())
 
   @@index([deviceId, partition])
   @@index([keyId, partition])
+  @@index([topic, partition])
 }

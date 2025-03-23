@@ -8,9 +8,97 @@ import {
 import { createLogger } from "../utils/logger";
 import { getDeviceById } from "./device.service";
 import { getOrCreateTopic } from "./subscription.service";
+import { mqttClientManager } from "../utils/mqtt-client";
+import { triggerScheduledPublicationsCheck } from "./scheduler.service";
 
 const prisma = new PrismaClient();
 const logger = createLogger("PublicationService");
+
+// Define QoS type to match MQTT package requirements
+type QoS = 0 | 1 | 2;
+
+/**
+ * Get the UNIX timestamp for the beginning of the current month
+ * Used for partitioning data
+ */
+function getCurrentMonthPartition(): bigint {
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  return BigInt(Math.floor(startOfMonth.getTime() / 1000));
+}
+
+/**
+ * Publish a message to the MQTT broker
+ * @param deviceId The device ID
+ * @param topicPath The topic to publish to
+ * @param payload The message payload
+ * @param qos QoS level
+ * @param retain Whether to retain the message
+ * @returns True if successful
+ */
+async function publishToMqttBroker(
+  deviceId: string,
+  topicPath: string,
+  payload: string,
+  qos: number = 0,
+  retain: boolean = false
+): Promise<boolean> {
+  logger.info(
+    `Publishing to MQTT broker: Device=${deviceId}, Topic=${topicPath}, QoS=${qos}, Retain=${retain}`
+  );
+
+  try {
+    // Get the device for credentials
+    const device = await getDeviceById(deviceId);
+    if (!device) {
+      logger.warn(`Device not found with ID: ${deviceId}`);
+      throw new Error(`Device not found with ID: ${deviceId}`);
+    }
+
+    // Get MQTT broker URL from environment
+    const brokerUrl = process.env.MQTT_BROKER_URL;
+    if (!brokerUrl) {
+      logger.error("MQTT broker URL not configured");
+      throw new Error("MQTT broker URL not configured");
+    }
+
+    // Get or create MQTT client
+    const client = await mqttClientManager.connect(
+      deviceId,
+      device.username,
+      device.password,
+      brokerUrl
+    );
+
+    // Safely cast QoS to the correct type: 0, 1, or 2
+    const qosLevel = qos >= 0 && qos <= 2 ? (qos as QoS) : 0;
+
+    // Publish the message to the MQTT broker
+    return new Promise<boolean>((resolve, reject) => {
+      client.publish(topicPath, payload, { qos: qosLevel, retain }, (err) => {
+        if (err) {
+          logger.error(
+            `Failed to publish message to MQTT broker: ${topicPath}`,
+            err
+          );
+          reject(err);
+          return;
+        }
+
+        logger.info(
+          `Successfully published message to MQTT broker: ${topicPath}`
+        );
+        resolve(true);
+      });
+    });
+  } catch (error: any) {
+    logger.error(
+      `Failed to publish message to MQTT broker: ${topicPath}`,
+      error
+    );
+    throw error;
+  }
+}
 
 /**
  * Publish a message to a topic
@@ -74,7 +162,10 @@ export const publishToTopic = async (publicationData: PublicationDto) => {
       );
     }
 
-    // Create the publication record
+    // Get the current month partition
+    const partition = getCurrentMonthPartition();
+
+    // Create the publication record with partition
     const publication = await prisma.publication.create({
       data: {
         deviceId: publicationData.deviceId.trim(),
@@ -82,19 +173,40 @@ export const publishToTopic = async (publicationData: PublicationDto) => {
         payload: publicationData.payload,
         qos: publicationData.qos || 0,
         retain: publicationData.retain || false,
+        partition, // Add the partition for efficient querying
       },
       include: {
         topic: true,
       },
     });
 
+    // Log detailed information about the published message
+    const truncatedPayload =
+      publicationData.payload.length > 100
+        ? `${publicationData.payload.substring(0, 100)}... [truncated]`
+        : publicationData.payload;
+
     logger.info(
-      `Successfully published message to topic: ${publicationData.topicPath}`
+      `Successfully created publication record for topic: ${publicationData.topicPath}`
     );
 
-    // Only log the publication event, no need to actually deliver to subscribers
+    logger.debug(
+      `Publication details: ID=${publication.id}, Topic=${topic.topicPath}, ` +
+        `Device=${publication.deviceId}, QoS=${publication.qos}, ` +
+        `Retain=${publication.retain}, Payload=${truncatedPayload}`
+    );
+
+    // Actually publish the message to the MQTT broker
+    await publishToMqttBroker(
+      publicationData.deviceId.trim(),
+      publicationData.topicPath.trim(),
+      publicationData.payload,
+      publicationData.qos || 0,
+      publicationData.retain || false
+    );
+
     logger.info(
-      `Message would be delivered to subscribers of topic: ${topic.topicPath}`
+      `Message delivered to subscribers of topic: ${topic.topicPath}`
     );
 
     return publication;
@@ -247,6 +359,9 @@ export const schedulePublication = async (
       logger.info(
         `Updated scheduled publication with ID: ${scheduledPublication.id}`
       );
+
+      // Trigger an immediate check in case the update affects soon-to-be-published messages
+      triggerScheduledPublicationsCheck();
     } else {
       // Create new scheduled publication
       scheduledPublication = await prisma.scheduledPublication.create({
@@ -266,6 +381,9 @@ export const schedulePublication = async (
       logger.info(
         `Created scheduled publication with ID: ${scheduledPublication.id}`
       );
+
+      // Trigger an immediate check in case the new publication is due soon
+      triggerScheduledPublicationsCheck();
     }
 
     return scheduledPublication;
@@ -400,6 +518,10 @@ export const updateScheduledPublication = async (
       });
 
       logger.info(`Successfully updated scheduled publication with ID: ${id}`);
+
+      // Trigger an immediate check in case the update affects timing
+      triggerScheduledPublicationsCheck();
+
       return updatedPublication;
     } catch (error: any) {
       // Handle case where publication doesn't exist
@@ -607,6 +729,10 @@ export const cancelScheduledPublication = async (id: string) => {
       logger.info(
         `Successfully cancelled scheduled publication with ID: ${id}`
       );
+
+      // No need to trigger scheduler for cancelled publications
+      // as they've been removed from processing consideration
+
       return cancelledPublication;
     } catch (error: any) {
       // Handle case where publication doesn't exist
@@ -629,7 +755,8 @@ export const cancelScheduledPublication = async (id: string) => {
 
 /**
  * Process due scheduled publications
- * This would typically be called by a job scheduler/cron
+ * This is called by the scheduler to publish messages when they're due
+ * @returns The number of processed publications
  */
 export const processScheduledPublications = async () => {
   logger.info("Processing scheduled publications");
@@ -647,6 +774,7 @@ export const processScheduledPublications = async () => {
       },
       include: {
         topic: true,
+        device: true,
       },
     });
 
@@ -654,13 +782,23 @@ export const processScheduledPublications = async () => {
 
     let processedCount = 0;
 
-    // Process each due publication (just mark as published)
+    // Process each due publication
     for (const publication of duePublications) {
       try {
-        // Log the publication (no actual delivery)
+        // Log the publication
         logger.info(
-          `Processing publication: ${publication.id} to topic: ${publication.topic.topicPath}`
+          `Processing scheduled publication: ${publication.id} to topic: ${publication.topic.topicPath}`
         );
+
+        // Actually publish the message by using the normal publish function
+        // This will create a record in the Publication model and send to MQTT broker
+        await publishToTopic({
+          deviceId: publication.deviceId,
+          topicPath: publication.topic.topicPath,
+          payload: publication.payload,
+          qos: publication.qos,
+          retain: publication.retain,
+        });
 
         // Update the publication status
         await prisma.scheduledPublication.update({
@@ -672,7 +810,7 @@ export const processScheduledPublications = async () => {
         });
 
         logger.info(
-          `Successfully marked scheduled message as published: ${publication.id}`
+          `Successfully published scheduled message: ${publication.id} to topic: ${publication.topic.topicPath}`
         );
         processedCount++;
       } catch (error: any) {
