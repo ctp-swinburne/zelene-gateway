@@ -2,6 +2,7 @@
 import { PrismaClient } from "@prisma/client";
 import { DeviceDto } from "../types/mqtt";
 import { createLogger } from "../utils/logger";
+import { disconnectDevice } from "./mqtt.service";
 
 const prisma = new PrismaClient();
 const logger = createLogger("DeviceService");
@@ -142,6 +143,28 @@ export const updateDevice = async (
       throw new Error("No valid fields to update");
     }
 
+    // Check if username or password is changing
+    const credentialsChanged =
+      (deviceData.username !== undefined &&
+        deviceData.username !== existingDevice.username) ||
+      (deviceData.password !== undefined &&
+        deviceData.password !== existingDevice.password);
+
+    // Disconnect device if credentials are changing
+    if (credentialsChanged) {
+      try {
+        await disconnectDevice(id);
+        logger.info(`Disconnected device: ${id} due to credential change`);
+      } catch (mqttError: any) {
+        logger.error(
+          `Failed to disconnect device with ID: ${id} from MQTT broker`,
+          mqttError
+        );
+        // Continue even if MQTT disconnection fails
+      }
+    }
+
+    // Update the device in database
     const updatedDevice = await prisma.device.update({
       where: { id },
       data: updateData,
@@ -179,6 +202,18 @@ export const deleteDevice = async (id: string) => {
       throw new Error(`Device not found with ID: ${id}`);
     }
 
+    // Disconnect device from MQTT
+    try {
+      await disconnectDevice(id);
+      logger.info(`Disconnected device: ${id} before deletion`);
+    } catch (mqttError: any) {
+      logger.error(
+        `Failed to disconnect device with ID: ${id} from MQTT broker`,
+        mqttError
+      );
+      // Continue even if MQTT disconnection fails
+    }
+
     // Delete all subscriptions and scheduled publications first
     // This is needed due to foreign key constraints
     await prisma.$transaction([
@@ -189,6 +224,12 @@ export const deleteDevice = async (id: string) => {
         where: { deviceId: id },
       }),
       prisma.publication.deleteMany({
+        where: { deviceId: id },
+      }),
+      prisma.deviceKey.deleteMany({
+        where: { deviceId: id },
+      }),
+      prisma.deviceData.deleteMany({
         where: { deviceId: id },
       }),
       prisma.device.delete({

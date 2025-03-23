@@ -4,6 +4,7 @@ import { SubscriptionDto } from "../types/mqtt";
 import { createLogger } from "../utils/logger";
 import { getDeviceById } from "./device.service";
 import { validateTopicPattern, hasWildcards } from "../utils/mqtt-pattern";
+import { subscribeToTopic, unsubscribeFromTopic } from "./mqtt.service";
 
 const prisma = new PrismaClient();
 const logger = createLogger("SubscriptionService");
@@ -111,6 +112,27 @@ export const createSubscription = async (subscriptionData: SubscriptionDto) => {
         topic: true,
       },
     });
+
+    // Subscribe to MQTT topic
+    try {
+      // Safely cast QoS to the correct type: 0, 1, or 2
+      const qosLevel =
+        subscription.qos >= 0 && subscription.qos <= 2
+          ? (subscription.qos as 0 | 1 | 2)
+          : 0;
+
+      await subscribeToTopic(
+        subscription.deviceId,
+        subscription.topic.topicPath,
+        qosLevel
+      );
+    } catch (mqttError: any) {
+      logger.error(
+        `Failed to subscribe to MQTT topic: ${subscription.topic.topicPath}`,
+        mqttError
+      );
+      // Continue even if MQTT subscription fails
+    }
 
     logger.info(
       `Successfully created subscription with ID: ${subscription.id}`
@@ -223,11 +245,37 @@ export const updateSubscription = async (id: string, qos: number) => {
   }
 
   try {
-    // Verify the subscription exists
+    // Get the subscription
     const subscription = await getSubscriptionById(id);
     if (!subscription) {
       logger.warn(`Subscription not found with ID: ${id}`);
       throw new Error(`Subscription not found with ID: ${id}`);
+    }
+
+    // Only resubscribe if QoS is changing
+    if (subscription.qos !== qos) {
+      // Unsubscribe and then resubscribe with new QoS
+      try {
+        await unsubscribeFromTopic(
+          subscription.deviceId,
+          subscription.topic.topicPath
+        );
+
+        // Safely cast QoS to the correct type: 0, 1, or 2
+        const qosLevel = qos >= 0 && qos <= 2 ? (qos as 0 | 1 | 2) : 0;
+
+        await subscribeToTopic(
+          subscription.deviceId,
+          subscription.topic.topicPath,
+          qosLevel
+        );
+      } catch (mqttError: any) {
+        logger.error(
+          `Failed to update MQTT subscription QoS for topic: ${subscription.topic.topicPath}`,
+          mqttError
+        );
+        // Continue even if MQTT operations fail
+      }
     }
 
     // Update the subscription
@@ -268,11 +316,25 @@ export const deleteSubscription = async (id: string) => {
   }
 
   try {
-    // Verify the subscription exists
+    // Get the subscription to get the topic path
     const subscription = await getSubscriptionById(id);
     if (!subscription) {
       logger.warn(`Subscription not found with ID: ${id}`);
       throw new Error(`Subscription not found with ID: ${id}`);
+    }
+
+    // Unsubscribe from MQTT topic
+    try {
+      await unsubscribeFromTopic(
+        subscription.deviceId,
+        subscription.topic.topicPath
+      );
+    } catch (mqttError: any) {
+      logger.error(
+        `Failed to unsubscribe from MQTT topic: ${subscription.topic.topicPath}`,
+        mqttError
+      );
+      // Continue even if MQTT unsubscription fails
     }
 
     // Delete the subscription

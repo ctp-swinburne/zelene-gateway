@@ -12,7 +12,8 @@
   "dependencies": {
     "@elysiajs/swagger": "^1.2.2",
     "@prisma/client": "^6.5.0",
-    "elysia": "latest"
+    "elysia": "latest",
+    "mqtt": "^5.10.4"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",

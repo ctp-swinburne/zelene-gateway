@@ -17,6 +17,8 @@ model Device {
   subscriptions         Subscription[]
   publications          Publication[]
   scheduledPublications ScheduledPublication[]
+  deviceKeys            DeviceKey[] // New relation
+  deviceData            DeviceData[] // New relation
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
 }
@@ -73,4 +75,32 @@ model ScheduledPublication {
   status        String    @default("PENDING") // PENDING, PUBLISHED, FAILED
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+}
+
+// New models for device telemetry data
+model DeviceKey {
+  id        String       @id @default(cuid())
+  device    Device       @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  deviceId  String
+  keyName   String
+  keyType   String
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  data      DeviceData[]
+
+  @@unique([deviceId, keyName])
+}
+
+model DeviceData {
+  id        String     @id @default(cuid())
+  device    Device     @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  deviceId  String
+  key       DeviceKey? @relation(fields: [keyId], references: [id], onDelete: SetNull)
+  keyId     String?
+  value     String
+  partition BigInt // UNIX timestamp of the month
+  timestamp DateTime   @default(now())
+
+  @@index([deviceId, partition])
+  @@index([keyId, partition])
 }
